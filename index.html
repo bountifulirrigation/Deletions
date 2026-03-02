@@ -25,31 +25,6 @@
       color: #555;
     }
 
-    /* ADDED (minimal): keep your look, just allow a button under the text when needed */
-    #loginScreenInner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      text-align: center;
-      padding: 0 18px;
-    }
-    #signInBtn {
-      display: none; /* shown only when not signed in */
-      width: 260px;
-      padding: 12px 14px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 8px;
-      border: none;
-      background-color: #2c7be5;
-      color: white;
-      font-weight: bold;
-      transition: all 0.2s;
-    }
-    #signInBtn:hover { background-color: #1a5fc4; }
-    #signInBtn:disabled { opacity: 0.7; cursor: not-allowed; }
-
     #appContainer {
       display: none;
       max-width: 500px;
@@ -182,11 +157,7 @@
 <body>
 
 <div id="loginScreen">
-  <!-- CHANGED (minimal): wrap text + button, keeps original “Loading secure app...” message -->
-  <div id="loginScreenInner">
-    <div id="loginMessage">Loading secure app...</div>
-    <button id="signInBtn">Sign In</button>
-  </div>
+  Loading secure app...
 </div>
 
 <div id="appContainer">
@@ -217,7 +188,7 @@ require([
   const featureLayerUrl =
     "https://services3.arcgis.com/qACnxJSsTspwubRv/arcgis/rest/services/service_f6d0b40f569c4851b2227f1f41e55aba/FeatureServer/0";
 
-  // CHANGED (minimal): popup auth + correct Deletions callback + stable redirect
+  // CHANGED (necessary): popup auth + Deletions callback + stable redirect
   const oauthInfo = new OAuthInfo({
     appId: "5cZGuKwUnUDFpAJ7",
     portalUrl: "https://bwsd.maps.arcgis.com",
@@ -228,30 +199,36 @@ require([
 
   esriId.registerOAuthInfos([oauthInfo]);
 
-  const loginMessage = document.getElementById("loginMessage");
-  const signInBtn = document.getElementById("signInBtn");
+  // CHANGED (necessary): remove auto-login prompt on load (prevents ABORTED/loops)
+  // and instead require a user click to sign in.
+  const loginScreen = document.getElementById("loginScreen");
 
-  // ADDED (minimal): only prompt on user click (avoids ABORTED / loops)
-  async function initAuth() {
-    try {
+  const signInBtn = document.createElement("button");
+  signInBtn.textContent = "Sign In";
+  signInBtn.style.display = "none";     // only show if not signed in
+  signInBtn.style.width = "260px";      // minimal inline style only for this button
+  signInBtn.style.marginTop = "18px";   // keeps it visually nice under the text
+  loginScreen.appendChild(signInBtn);
+
+  async function initAuth(){
+    try{
       await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
       startApp();
-    } catch (e) {
+    }catch(e){
       console.warn("Not signed in yet:", e);
-      loginMessage.textContent = "Please sign in to continue.";
+      // Keep your original message, just stack the button under it
+      loginScreen.style.flexDirection = "column";
       signInBtn.style.display = "block";
     }
   }
 
   signInBtn.addEventListener("click", async () => {
     signInBtn.disabled = true;
-    loginMessage.textContent = "Opening sign-in...";
-    try {
+    try{
       await esriId.getCredential(oauthInfo.portalUrl + "/sharing");
       startApp();
-    } catch (err) {
+    }catch(err){
       console.error("Auth failed:", err);
-      loginMessage.textContent = "Authentication failed. Open the browser console for details.";
       signInBtn.disabled = false;
     }
   });
@@ -353,6 +330,7 @@ require([
     confirmContainer.style.display = "none";
   });
 
+  // CHANGED (necessary): make handler async and pass authentication into applyEdits
   confirmYes.addEventListener("click", async function() {
     confirmContainer.style.display = "none";
 
@@ -364,7 +342,6 @@ require([
     const year = new Date().getFullYear().toString().slice(-2);
     const activityCode = "DEL" + year;
 
-    // ADDED (minimal): ensure credential at submit time (but won’t prompt again if already signed in)
     let cred;
     try {
       cred = await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
@@ -385,7 +362,6 @@ require([
           }
         }])
       },
-      // CHANGED (minimal): pass auth for secured edits
       authentication: cred
     }).then(function(response) {
       if (response.data.updateResults[0].success) {
