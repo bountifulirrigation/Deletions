@@ -188,52 +188,21 @@ require([
   const featureLayerUrl =
     "https://services3.arcgis.com/qACnxJSsTspwubRv/arcgis/rest/services/service_f6d0b40f569c4851b2227f1f41e55aba/FeatureServer/0";
 
-  // CHANGED (necessary): popup auth + Deletions callback + stable redirect
   const oauthInfo = new OAuthInfo({
     appId: "5cZGuKwUnUDFpAJ7",
     portalUrl: "https://bwsd.maps.arcgis.com",
-    popup: true,
-    popupCallbackUrl: "https://bountifulirrigation.github.io/Deletions/oauth-callback.html",
-    redirectUri: "https://bountifulirrigation.github.io/Deletions/"
+    popup: false,
+    redirectUri: window.location.origin + window.location.pathname
   });
 
   esriId.registerOAuthInfos([oauthInfo]);
 
-  // CHANGED (necessary): remove auto-login prompt on load (prevents ABORTED/loops)
-  // and instead require a user click to sign in.
-  const loginScreen = document.getElementById("loginScreen");
-
-  const signInBtn = document.createElement("button");
-  signInBtn.textContent = "Sign In";
-  signInBtn.style.display = "none";     // only show if not signed in
-  signInBtn.style.width = "260px";      // minimal inline style only for this button
-  signInBtn.style.marginTop = "18px";   // keeps it visually nice under the text
-  loginScreen.appendChild(signInBtn);
-
-  async function initAuth(){
-    try{
-      await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
-      startApp();
-    }catch(e){
-      console.warn("Not signed in yet:", e);
-      // Keep your original message, just stack the button under it
-      loginScreen.style.flexDirection = "column";
-      signInBtn.style.display = "block";
-    }
-  }
-
-  signInBtn.addEventListener("click", async () => {
-    signInBtn.disabled = true;
-    try{
-      await esriId.getCredential(oauthInfo.portalUrl + "/sharing");
-      startApp();
-    }catch(err){
-      console.error("Auth failed:", err);
-      signInBtn.disabled = false;
-    }
-  });
-
-  initAuth();
+  esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing")
+    .then(startApp)
+    .catch(function() {
+      esriId.getCredential(oauthInfo.portalUrl + "/sharing")
+        .then(startApp);
+    });
 
   function startApp() {
     document.getElementById("loginScreen").style.display = "none";
@@ -330,8 +299,7 @@ require([
     confirmContainer.style.display = "none";
   });
 
-  // CHANGED (necessary): make handler async and pass authentication into applyEdits
-  confirmYes.addEventListener("click", async function() {
+  confirmYes.addEventListener("click", function() {
     confirmContainer.style.display = "none";
 
     let futuresValue = futuresInput.value.trim();
@@ -341,13 +309,6 @@ require([
 
     const year = new Date().getFullYear().toString().slice(-2);
     const activityCode = "DEL" + year;
-
-    let cred;
-    try {
-      cred = await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
-    } catch {
-      cred = await esriId.getCredential(oauthInfo.portalUrl + "/sharing");
-    }
 
     esriRequest(featureLayerUrl + "/applyEdits", {
       method: "post",
@@ -361,8 +322,7 @@ require([
             FUTURES: futuresValue
           }
         }])
-      },
-      authentication: cred
+      }
     }).then(function(response) {
       if (response.data.updateResults[0].success) {
         status.innerHTML = "✅ Parcel Updated — Next Parcel";
