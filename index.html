@@ -19,13 +19,36 @@
     #loginScreen {
       height: 100vh;
       display: flex;
-      flex-direction: column;
       justify-content: center;
       align-items: center;
       font-size: 1.5em;
       color: #555;
-      gap: 15px;
     }
+
+    /* ADDED (minimal): keep your look, just allow a button under the text when needed */
+    #loginScreenInner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+      padding: 0 18px;
+    }
+    #signInBtn {
+      display: none; /* shown only when not signed in */
+      width: 260px;
+      padding: 12px 14px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: none;
+      background-color: #2c7be5;
+      color: white;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    #signInBtn:hover { background-color: #1a5fc4; }
+    #signInBtn:disabled { opacity: 0.7; cursor: not-allowed; }
 
     #appContainer {
       display: none;
@@ -36,31 +59,134 @@
       border-radius: 12px;
       box-shadow: 0 8px 20px rgba(0,0,0,0.12);
       text-align: center;
+      transition: all 0.3s ease-in-out;
+    }
+
+    h2 {
+      margin-bottom: 25px;
+      color: #2c3e50;
     }
 
     input {
       width: 90%;
       padding: 14px;
+      font-size: 16px;
       margin-top: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      transition: all 0.2s;
+    }
+
+    input:focus {
+      border-color: #2c7be5;
+      box-shadow: 0 0 5px rgba(44,123,229,0.4);
+      outline: none;
     }
 
     button {
       width: 90%;
       padding: 14px;
       margin-top: 20px;
+      font-size: 16px;
+      cursor: pointer;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      border-radius: 8px;
+      border: none;
+      background-color: #2c7be5;
+      color: white;
+      font-weight: bold;
+      transition: all 0.2s;
     }
 
-    #signInBtn {
-      display: none;
+    button:hover {
+      background-color: #1a5fc4;
     }
+
+    #status {
+      margin-top: 18px;
+      font-weight: bold;
+      min-height: 20px;
+    }
+
+    #status.success {
+      color: #28a745;
+    }
+
+    #status.error {
+      color: #dc3545;
+    }
+
+    #parcelInfo {
+      margin-top: 18px;
+      background: #f7f9fb;
+      padding: 12px;
+      border-radius: 6px;
+      display: none;
+      text-align: left;
+      color: #2c3e50;
+    }
+
+    #futuresInput {
+      display: none;
+      margin-top: 12px;
+    }
+
+    /* Inline confirmation with overlay */
+    #confirmContainer {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      position: relative;
+      z-index: 2;
+    }
+
+    .confirmBtn {
+      padding: 10px 18px;
+      margin: 10px 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+
+    .confirmYes {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .confirmYes:hover {
+      background-color: #1e7e34;
+    }
+
+    .confirmNo {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .confirmNo:hover {
+      background-color: #a71d2a;
+    }
+
   </style>
 </head>
 
 <body>
 
 <div id="loginScreen">
-  <div id="loginMessage">Loading secure app...</div>
-  <button id="signInBtn">Sign In</button>
+  <!-- CHANGED (minimal): wrap text + button, keeps original “Loading secure app...” message -->
+  <div id="loginScreenInner">
+    <div id="loginMessage">Loading secure app...</div>
+    <button id="signInBtn">Sign In</button>
+  </div>
 </div>
 
 <div id="appContainer">
@@ -73,8 +199,8 @@
 
   <div id="confirmContainer">
     <span>Are you sure you want to inactivate this parcel?</span><br/>
-    <button class="confirmYes">Yes</button>
-    <button class="confirmNo">No</button>
+    <button class="confirmBtn confirmYes">Yes</button>
+    <button class="confirmBtn confirmNo">No</button>
   </div>
 
   <div id="parcelInfo"></div>
@@ -91,6 +217,7 @@ require([
   const featureLayerUrl =
     "https://services3.arcgis.com/qACnxJSsTspwubRv/arcgis/rest/services/service_f6d0b40f569c4851b2227f1f41e55aba/FeatureServer/0";
 
+  // CHANGED (minimal): popup auth + correct Deletions callback + stable redirect
   const oauthInfo = new OAuthInfo({
     appId: "5cZGuKwUnUDFpAJ7",
     portalUrl: "https://bwsd.maps.arcgis.com",
@@ -104,25 +231,27 @@ require([
   const loginMessage = document.getElementById("loginMessage");
   const signInBtn = document.getElementById("signInBtn");
 
+  // ADDED (minimal): only prompt on user click (avoids ABORTED / loops)
   async function initAuth() {
     try {
       await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
       startApp();
-    } catch {
-      loginMessage.innerText = "Please sign in to continue.";
+    } catch (e) {
+      console.warn("Not signed in yet:", e);
+      loginMessage.textContent = "Please sign in to continue.";
       signInBtn.style.display = "block";
     }
   }
 
   signInBtn.addEventListener("click", async () => {
     signInBtn.disabled = true;
-    loginMessage.innerText = "Opening sign-in...";
+    loginMessage.textContent = "Opening sign-in...";
     try {
       await esriId.getCredential(oauthInfo.portalUrl + "/sharing");
       startApp();
     } catch (err) {
-      console.error(err);
-      loginMessage.innerText = "Authentication failed.";
+      console.error("Auth failed:", err);
+      loginMessage.textContent = "Authentication failed. Open the browser console for details.";
       signInBtn.disabled = false;
     }
   });
@@ -155,12 +284,14 @@ require([
     info.style.display = "none";
     confirmContainer.style.display = "none";
     status.innerHTML = "";
+    status.className = "";
     currentObjectId = null;
     existingFutures = "";
 
     if (!parcel) return;
 
     status.innerHTML = "Searching...";
+    status.className = "";
 
     esriRequest(featureLayerUrl + "/query", {
       method: "post",
@@ -174,6 +305,7 @@ require([
 
       if (response.data.features.length === 0) {
         status.innerHTML = "Parcel not found.";
+        status.className = "error";
         return;
       }
 
@@ -183,33 +315,56 @@ require([
 
       if (attrs.Parcel_Status !== "Active") {
         status.innerHTML = "Parcel already inactive.";
+        status.className = "error";
         return;
       }
 
-      info.innerHTML = "<strong>Owner:</strong> " + (attrs.Owner_Name || "N/A");
+      info.innerHTML =
+        "<strong>Owner:</strong> " + (attrs.Owner_Name || "N/A") +
+        "<br><strong>Status:</strong> " + attrs.Parcel_Status;
+
       info.style.display = "block";
       futuresInput.style.display = "block";
       submitBtn.style.display = "block";
-      status.innerHTML = "Ready";
+      status.innerHTML = "Parcel ready for inactivation.";
+      status.className = "success";
 
-    }).catch(console.error);
+      futuresInput.focus();
+    }).catch(function(error) {
+      status.innerHTML = "Error during lookup.";
+      status.className = "error";
+      console.error(error);
+    });
   }
 
   parcelInput.addEventListener("blur", lookupParcel);
+  parcelInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      lookupParcel();
+    }
+  });
 
   submitBtn.addEventListener("click", function() {
+    if (!currentObjectId) return;
     confirmContainer.style.display = "block";
   });
 
-  confirmNo.onclick = () => confirmContainer.style.display = "none";
+  confirmNo.addEventListener("click", () => {
+    confirmContainer.style.display = "none";
+  });
 
   confirmYes.addEventListener("click", async function() {
     confirmContainer.style.display = "none";
 
-    let futuresValue = futuresInput.value.trim() || existingFutures;
+    let futuresValue = futuresInput.value.trim();
+    if (!futuresValue) {
+      futuresValue = existingFutures;
+    }
 
     const year = new Date().getFullYear().toString().slice(-2);
+    const activityCode = "DEL" + year;
 
+    // ADDED (minimal): ensure credential at submit time (but won’t prompt again if already signed in)
     let cred;
     try {
       cred = await esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing");
@@ -225,19 +380,34 @@ require([
           attributes: {
             objectid: currentObjectId,
             Parcel_Status: "Inactive",
-            ACTIVITY: "DEL" + year,
+            ACTIVITY: activityCode,
             FUTURES: futuresValue
           }
         }])
       },
+      // CHANGED (minimal): pass auth for secured edits
       authentication: cred
-    }).then(r => {
-      if (r.data.updateResults[0].success) {
-        status.innerHTML = "✅ Success";
+    }).then(function(response) {
+      if (response.data.updateResults[0].success) {
+        status.innerHTML = "✅ Parcel Updated — Next Parcel";
+        status.className = "success";
+        parcelInput.value = "";
+        futuresInput.value = "";
+        info.style.display = "none";
+        submitBtn.style.display = "none";
+        futuresInput.style.display = "none";
+        currentObjectId = null;
+        existingFutures = "";
+        parcelInput.focus();
       } else {
-        status.innerHTML = "Update failed";
+        status.innerHTML = "Update failed.";
+        status.className = "error";
       }
-    }).catch(console.error);
+    }).catch(function(error) {
+      status.innerHTML = "Error during update.";
+      status.className = "error";
+      console.error(error);
+    });
   });
 
 });
